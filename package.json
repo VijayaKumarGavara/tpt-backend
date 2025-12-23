@@ -1,0 +1,23 @@
+{
+  "name": "backend-test",
+  "version": "1.0.0",
+  "description": "Database for tractor-track-prototype",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VijayaKumarGavara/tractor-track-prototype-backend"
+  },
+  "author": "Vijaya Kumar Gavara",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.22.1",
+    "mysql2": "^3.16.0"
+  }
+}
