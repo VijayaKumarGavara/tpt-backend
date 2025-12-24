@@ -377,6 +377,8 @@ app.post("/api/tractor-drivers/login", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to Login. Please try after sometime",
+      errorMsg:error.message,
+      stack: error.stack
     });
   }
 });
