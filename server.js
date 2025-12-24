@@ -26,22 +26,71 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
 
+// app.get("/api/farmers", authMiddleware, async (req, res) => {
+//   try {
+//     const { name, village, mobile, farmer_id } = req.query;
+
+//     let query = "SELECT * FROM farmers";
+//     let values = [];
+
+//     if (farmer_id) {
+//       query += " WHERE farmer_id = ?";
+//       values.push(farmer_id);
+//     } else if (mobile) {
+//       query += " WHERE mobile = ?";
+//       values.push(mobile);
+//     } else if (name && village) {
+//       query += " WHERE LOWER(name) LIKE ? AND LOWER(village) LIKE ?";
+//       values.push(`%${name.toLowerCase()}%`, `%${village.toLowerCase()}%`);
+//     }
+
+//     const [rows] = await pool.query(query, values);
+
+//     res.status(200).json({
+//       success: true,
+//       count: rows.length,
+//       data: rows,
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to search farmers",
+//     });
+//   }
+// });
+
 app.get("/api/farmers", authMiddleware, async (req, res) => {
   try {
-    const { name, village, mobile, farmer_id } = req.query;
+    const { farmer_id, mobile, name, village } = req.query;
 
-    let query = "SELECT * FROM farmers";
+    let conditions = [];
     let values = [];
 
     if (farmer_id) {
-      query += " WHERE farmer_id = ?";
+      conditions.push("farmer_id = ?");
       values.push(farmer_id);
-    } else if (mobile) {
-      query += " WHERE mobile = ?";
+    }
+
+    if (mobile) {
+      conditions.push("mobile = ?");
       values.push(mobile);
-    } else if (name && village) {
-      query += " WHERE LOWER(name) LIKE ? AND LOWER(village) LIKE ?";
-      values.push(`%${name.toLowerCase()}%`, `%${village.toLowerCase()}%`);
+    }
+
+    if (name) {
+      conditions.push("LOWER(name) LIKE ?");
+      values.push(`%${name.toLowerCase()}%`);
+    }
+
+    if (village) {
+      conditions.push("LOWER(village) LIKE ?");
+      values.push(`%${village.toLowerCase()}%`);
+    }
+
+    let query = "SELECT * FROM farmers";
+
+    if (conditions.length > 0) {
+      query += " WHERE " + conditions.join(" AND ");
     }
 
     const [rows] = await pool.query(query, values);
