@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv"
+import "./env.js";
+
 import ConnectDB from "./dbConnection.js";
 import hashPassword from "./utils/hashPassword.js";
 import comparePassword from "./utils/comparePassword.js";
@@ -8,7 +9,6 @@ import { generateToken } from "./utils/jwt.js";
 import authMiddleware from "./middlewares/authMiddleware.js";
 import { dbQuery } from "./dbQuery.js";
 
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;

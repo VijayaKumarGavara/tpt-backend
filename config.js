@@ -5,9 +5,9 @@ export default {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    port: process.env.DB_PORT,
+    port: Number(process.env.DB_PORT),
     ssl: {
-      rejectUnauthorized: true, // 👈 REQUIRED for Aiven
+      rejectUnauthorized: false, // 👈 allow Aiven self-signed cert
     },
     waitForConnections: true,
     connectionLimit: 10,
