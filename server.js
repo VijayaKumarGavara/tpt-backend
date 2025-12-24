@@ -1,8 +1,7 @@
+import "./env.js";
 import express from "express";
 import cors from "cors";
-import "./env.js";
 
-import ConnectDB from "./dbConnection.js";
 import hashPassword from "./utils/hashPassword.js";
 import comparePassword from "./utils/comparePassword.js";
 import { generateToken } from "./utils/jwt.js";
@@ -13,378 +12,316 @@ import { dbQuery } from "./dbQuery.js";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
 app.use(cors({
   origin: "*", // later you can restrict
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// const pool = ConnectDB();
 
 const today = new Date().toISOString().split("T")[0];
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
 
-// app.get("/api/farmers", authMiddleware, async (req, res) => {
-//   try {
-//     const { name, village, mobile, farmer_id } = req.query;
+app.get("/api/farmers", authMiddleware, async (req, res) => {
+  try {
+    const { name, village, mobile, farmer_id } = req.query;
 
-//     let query = "SELECT * FROM farmers";
-//     let values = [];
+    let query = "SELECT * FROM farmers";
+    let values = [];
 
-//     if (farmer_id) {
-//       query += " WHERE farmer_id = ?";
-//       values.push(farmer_id);
-//     } else if (mobile) {
-//       query += " WHERE mobile = ?";
-//       values.push(mobile);
-//     } else if (name && village) {
-//       query += " WHERE LOWER(name) LIKE ? AND LOWER(village) LIKE ?";
-//       values.push(`%${name.toLowerCase()}%`, `%${village.toLowerCase()}%`);
-//     }
+    if (farmer_id) {
+      query += " WHERE farmer_id = ?";
+      values.push(farmer_id);
+    } else if (mobile) {
+      query += " WHERE mobile = ?";
+      values.push(mobile);
+    } else if (name && village) {
+      query += " WHERE LOWER(name) LIKE ? AND LOWER(village) LIKE ?";
+      values.push(`%${name.toLowerCase()}%`, `%${village.toLowerCase()}%`);
+    }
 
-//     const [rows] = await pool.query(query, values);
+    const rows = await dbQuery(query, values);
 
-//     res.status(200).json({
-//       success: true,
-//       count: rows.length,
-//       data: rows,
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to search farmers",
-//     });
-//   }
-// });
+    res.status(200).json({
+      success: true,
+      count: rows.length,
+      data: rows,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to search farmers",
+    });
+  }
+});
 
-// app.get("/api/farmers", authMiddleware, async (req, res) => {
-//   try {
-//     const { farmer_id, mobile, name, village } = req.query;
 
-//     let conditions = [];
-//     let values = [];
+app.post("/api/farmers", authMiddleware, async (req, res) => {
+  try {
+    const { name, village, mobile } = req.body;
 
-//     if (farmer_id) {
-//       conditions.push("farmer_id = ?");
-//       values.push(farmer_id);
-//     }
+    if (!name || !village) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields",
+      });
+    }
+    const farmer_id = `F${Date.now()}`;
+    await dbQuery(
+      `INSERT INTO farmers (farmer_id, name, village, mobile)
+       VALUES (?, ?, ?, ?)`,
+      [farmer_id, name, village, mobile || null]
+    );
 
-//     if (mobile) {
-//       conditions.push("mobile = ?");
-//       values.push(mobile);
-//     }
+    res.status(201).json({
+      success: true,
+      message: "Farmer created successfully",
+      data: { farmer_id, name, village, mobile },
+    });
+  } catch (error) {
+    console.error(error);
 
-//     if (name) {
-//       conditions.push("LOWER(name) LIKE ?");
-//       values.push(`%${name.toLowerCase()}%`);
-//     }
+    // duplicate PK handling
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        success: false,
+        isAlreadyExists:true,
+        message: "Farmer already exists",
+      });
+    }
 
-//     if (village) {
-//       conditions.push("LOWER(village) LIKE ?");
-//       values.push(`%${village.toLowerCase()}%`);
-//     }
+    res.status(500).json({
+      success: false,
+      message: "Failed to create farmer",
+    });
+  }
+});
 
-//     let query = "SELECT * FROM farmers";
+app.get("/api/tractor-works", authMiddleware, async (req, res) => {
+  try {
+    const query = `select farmers.farmer_id, farmers.name, t.work_type, t.pricing_context, t.unit_type, t.notes,t.quantity,t.rate,t.total_amount, DATE_FORMAT(t.work_date, '%Y-%m-%d') AS work_date
+from tractor_works as t
+INNER JOIN farmers on farmers.farmer_id=t.farmer_id;`;
 
-//     if (conditions.length > 0) {
-//       query += " WHERE " + conditions.join(" AND ");
-//     }
+    const rows = await dbQuery(query);
+    res.status(200).json({
+      success: true,
+      count: rows.length,
+      data: rows,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get Tractor Works",
+    });
+  }
+});
 
-//     const [rows] = await pool.query(query, values);
+app.post("/api/tractor-works", authMiddleware, async (req, res) => {
+  const {
+    farmer_id,
+    work_type,
+    pricing_context,
+    unit_type,
+    notes,
+    quantity,
+    rate,
+  } = req.body;
 
-//     res.status(200).json({
-//       success: true,
-//       count: rows.length,
-//       data: rows,
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to search farmers",
-//     });
-//   }
-// });
+  const total_amount = quantity * rate;
 
-// app.post("/api/farmers", authMiddleware, async (req, res) => {
-//   try {
-//     const { name, village, mobile } = req.body;
+  try {
 
-//     if (!name || !village) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Missing required fields",
-//       });
-//     }
-//     const farmer_id = `F${Date.now()}`;
-//     await pool.query(
-//       `INSERT INTO farmers (farmer_id, name, village, mobile)
-//        VALUES (?, ?, ?, ?)`,
-//       [farmer_id, name, village, mobile || null]
-//     );
+    // 1️⃣ Insert tractor work
+    const workId = `W${Date.now()}`;
 
-//     res.status(201).json({
-//       success: true,
-//       message: "Farmer created successfully",
-//       data: { farmer_id, name, village, mobile },
-//     });
-//   } catch (error) {
-//     console.error(error);
+    await dbQuery(
+      `INSERT INTO tractor_works 
+      (work_id, farmer_id, work_type, pricing_context, unit_type, notes, quantity, rate, total_amount, work_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        workId,
+        farmer_id,
+        work_type,
+        pricing_context ? JSON.stringify(pricing_context) : null,
+        unit_type,
+        notes,
+        quantity,
+        rate,
+        total_amount,
+        today,
+      ]
+    );
 
-//     // duplicate PK handling
-//     if (error.code === "ER_DUP_ENTRY") {
-//       return res.status(409).json({
-//         success: false,
-//         isAlreadyExists:true,
-//         message: "Farmer already exists",
-//       });
-//     }
+    // 2️⃣ Check existing payment due
+    const existingDue = await dbQuery(
+      "SELECT * FROM payment_dues WHERE farmer_id = ?",
+      [farmer_id]
+    );
 
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to create farmer",
-//     });
-//   }
-// });
+    if (existingDue.length > 0) {
+      // update
+      await dbQuery(
+        `UPDATE payment_dues 
+         SET amount_due = amount_due + ?, updated_at = CURDATE()
+         WHERE farmer_id = ?`,
+        [total_amount, farmer_id]
+      );
+    } else {
+      // create
+      const dueId = `D${Date.now()}`;
 
-// app.get("/api/tractor-works", authMiddleware, async (req, res) => {
-//   try {
-//     const query = `select farmers.farmer_id, farmers.name, t.work_type, t.pricing_context, t.unit_type, t.notes,t.quantity,t.rate,t.total_amount, DATE_FORMAT(t.work_date, '%Y-%m-%d') AS work_date
-// from tractor_works as t
-// INNER JOIN farmers on farmers.farmer_id=t.farmer_id;`;
+      await dbQuery(
+        `INSERT INTO payment_dues 
+        (due_id, farmer_id, amount_due, amount_paid, status, updated_at)
+        VALUES (?, ?, ?, 0, 'pending', CURDATE())`,
+        [dueId, farmer_id, total_amount]
+      );
+    }
 
-//     const [rows] = await pool.query(query);
-//     res.status(200).json({
-//       success: true,
-//       count: rows.length,
-//       data: rows,
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to get Tractor Works",
-//     });
-//   }
-// });
 
-// app.post("/api/tractor-works", authMiddleware, async (req, res) => {
-//   const {
-//     farmer_id,
-//     work_type,
-//     pricing_context,
-//     unit_type,
-//     notes,
-//     quantity,
-//     rate,
-//   } = req.body;
+    res.status(201).json({
+      success: true,
+      message: "Tractor work added successfully",
+      work_id: workId,
+    });
+  } catch (error) {
+    console.error(error);
 
-//   const total_amount = quantity * rate;
-//   const db = await pool.getConnection();
+    res.status(500).json({
+      success: false,
+      message: "Failed to add tractor work",
+    });
+  } 
+});
 
-//   try {
-//     await db.beginTransaction();
+app.get("/api/payment-dues", authMiddleware, async (req, res) => {
+  const { farmer_id } = req.query;
 
-//     // 1️⃣ Insert tractor work
-//     const workId = `W${Date.now()}`;
+  try {
+    let query = `
+      SELECT 
+        farmers.name,
+        farmers.village,
+        payment_dues.farmer_id,
+        payment_dues.due_id,
+        payment_dues.amount_due,
+        payment_dues.amount_paid,
+        payment_dues.status
+      FROM payment_dues
+      INNER JOIN farmers 
+        ON payment_dues.farmer_id = farmers.farmer_id
+    `;
 
-//     await db.query(
-//       `INSERT INTO tractor_works 
-//       (work_id, farmer_id, work_type, pricing_context, unit_type, notes, quantity, rate, total_amount, work_date)
-//       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-//       [
-//         workId,
-//         farmer_id,
-//         work_type,
-//         pricing_context ? JSON.stringify(pricing_context) : null,
-//         unit_type,
-//         notes,
-//         quantity,
-//         rate,
-//         total_amount,
-//         today,
-//       ]
-//     );
+    const values = [];
 
-//     // 2️⃣ Check existing payment due
-//     const [existingDue] = await db.query(
-//       "SELECT * FROM payment_dues WHERE farmer_id = ?",
-//       [farmer_id]
-//     );
+    if (farmer_id) {
+      query += " WHERE payment_dues.farmer_id = ?";
+      values.push(farmer_id);
+    }
 
-//     if (existingDue.length > 0) {
-//       // update
-//       await db.query(
-//         `UPDATE payment_dues 
-//          SET amount_due = amount_due + ?, updated_at = CURDATE()
-//          WHERE farmer_id = ?`,
-//         [total_amount, farmer_id]
-//       );
-//     } else {
-//       // create
-//       const dueId = `D${Date.now()}`;
+    const rows = await dbQuery(query, values);
 
-//       await db.query(
-//         `INSERT INTO payment_dues 
-//         (due_id, farmer_id, amount_due, amount_paid, status, updated_at)
-//         VALUES (?, ?, ?, 0, 'pending', CURDATE())`,
-//         [dueId, farmer_id, total_amount]
-//       );
-//     }
+    res.status(200).json({
+      success: true,
+      count: rows.length,
+      data: rows,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get Payment Dues",
+    });
+  }
+});
 
-//     await db.commit();
+app.post("/api/payment", authMiddleware, async (req, res) => {
+  const { farmer_id, due_id, amount, payment_mode } = req.body;
 
-//     res.status(201).json({
-//       success: true,
-//       message: "Tractor work added successfully",
-//       work_id: workId,
-//     });
-//   } catch (error) {
-//     await db.rollback();
-//     console.error(error);
+  if (!farmer_id || !due_id || !amount || amount <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid payment data",
+    });
+  }
+  try {
 
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to add tractor work",
-//     });
-//   } finally {
-//     db.release();
-//   }
-// });
+    // 1️⃣ Get current due
+    const rows = await dbQuery(
+      "SELECT * FROM payment_dues WHERE due_id = ?",
+      [due_id]
+    );
 
-// app.get("/api/payment-dues", authMiddleware, async (req, res) => {
-//   const { farmer_id } = req.query;
+    if (rows.length === 0) {
+      throw new Error("Due not found");
+    }
 
-//   try {
-//     let query = `
-//       SELECT 
-//         farmers.name,
-//         farmers.village,
-//         payment_dues.farmer_id,
-//         payment_dues.due_id,
-//         payment_dues.amount_due,
-//         payment_dues.amount_paid,
-//         payment_dues.status
-//       FROM payment_dues
-//       INNER JOIN farmers 
-//         ON payment_dues.farmer_id = farmers.farmer_id
-//     `;
+    const due = rows[0];
 
-//     const values = [];
+    if (amount > due.amount_due) {
+      throw new Error("Payment exceeds due amount");
+    }
 
-//     if (farmer_id) {
-//       query += " WHERE payment_dues.farmer_id = ?";
-//       values.push(farmer_id);
-//     }
+    const newAmountDue = due.amount_due - amount;
+    const newAmountPaid = due.amount_paid + amount;
+    const status = newAmountDue === 0 ? "paid" : "partial";
 
-//     const [rows] = await pool.query(query, values);
+    // 2️⃣ Update payment_dues
+    await dbQuery(
+      `UPDATE payment_dues
+       SET amount_due = ?, amount_paid = ?, status = ?, updated_at = ?
+       WHERE due_id = ?`,
+      [newAmountDue, newAmountPaid, status, today, due_id]
+    );
 
-//     res.status(200).json({
-//       success: true,
-//       count: rows.length,
-//       data: rows,
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to get Payment Dues",
-//     });
-//   }
-// });
+    // 3️⃣ Insert transaction
+    const transactionId = `T${Date.now()}`;
 
-// app.post("/api/payment", authMiddleware, async (req, res) => {
-//   const { farmer_id, due_id, amount, payment_mode } = req.body;
+    await dbQuery(
+      `INSERT INTO transactions
+       (transaction_id, farmer_id, due_id, amount, payment_mode, payment_date)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [transactionId, farmer_id, due_id, amount, payment_mode, today]
+    );
 
-//   if (!farmer_id || !due_id || !amount || amount <= 0) {
-//     return res.status(400).json({
-//       success: false,
-//       message: "Invalid payment data",
-//     });
-//   }
-//   const db = await pool.getConnection();
-//   try {
-//     await db.beginTransaction();
 
-//     // 1️⃣ Get current due
-//     const [rows] = await db.query(
-//       "SELECT * FROM payment_dues WHERE due_id = ?",
-//       [due_id]
-//     );
+    res.status(201).json({
+      success: true,
+      message: "Payment recorded successfully",
+    });
+  } catch (error) {
+    console.error(error);
 
-//     if (rows.length === 0) {
-//       throw new Error("Due not found");
-//     }
+    res.status(500).json({
+      success: false,
+      message: error.message || "Payment failed",
+    });
+  } 
+});
 
-//     const due = rows[0];
-
-//     if (amount > due.amount_due) {
-//       throw new Error("Payment exceeds due amount");
-//     }
-
-//     const newAmountDue = due.amount_due - amount;
-//     const newAmountPaid = due.amount_paid + amount;
-//     const status = newAmountDue === 0 ? "paid" : "partial";
-
-//     // 2️⃣ Update payment_dues
-//     await db.query(
-//       `UPDATE payment_dues
-//        SET amount_due = ?, amount_paid = ?, status = ?, updated_at = ?
-//        WHERE due_id = ?`,
-//       [newAmountDue, newAmountPaid, status, today, due_id]
-//     );
-
-//     // 3️⃣ Insert transaction
-//     const transactionId = `T${Date.now()}`;
-
-//     await db.query(
-//       `INSERT INTO transactions
-//        (transaction_id, farmer_id, due_id, amount, payment_mode, payment_date)
-//        VALUES (?, ?, ?, ?, ?, ?)`,
-//       [transactionId, farmer_id, due_id, amount, payment_mode, today]
-//     );
-
-//     await db.commit();
-
-//     res.status(201).json({
-//       success: true,
-//       message: "Payment recorded successfully",
-//     });
-//   } catch (error) {
-//     await db.rollback();
-//     console.error(error);
-
-//     res.status(500).json({
-//       success: false,
-//       message: error.message || "Payment failed",
-//     });
-//   } finally {
-//     db.release();
-//   }
-// });
-
-// app.get("/api/transactions", authMiddleware, async (req, res) => {
-//   try {
-//     const query = `select farmers.name, t.amount, t.payment_mode, DATE_FORMAT(t.payment_date, '%Y-%m-%d') AS payment_date from transactions as t
-//     INNER JOIN farmers ON farmers.farmer_id=t.farmer_id order by t.payment_date desc;`;
-//     const [rows] = await pool.query(query);
-//     res.status(200).json({
-//       success: true,
-//       count: rows.length,
-//       data: rows,
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to search farmers",
-//     });
-//   }
-// });
+app.get("/api/transactions", authMiddleware, async (req, res) => {
+  try {
+    const query = `select farmers.name, t.amount, t.payment_mode, DATE_FORMAT(t.payment_date, '%Y-%m-%d') AS payment_date from transactions as t
+    INNER JOIN farmers ON farmers.farmer_id=t.farmer_id order by t.payment_date desc;`;
+    const rows = await dbQuery(query);
+    res.status(200).json({
+      success: true,
+      count: rows.length,
+      data: rows,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to search farmers",
+    });
+  }
+});
 
 app.post("/api/tractor-drivers/login", async (req, res) => {
   try {
@@ -395,7 +332,7 @@ app.post("/api/tractor-drivers/login", async (req, res) => {
         message: "Missing required fields",
       });
     }
-    const [rows] = await pool.query(
+    const rows = await dbQuery(
       `SELECT driver_id, driver_name, driver_village, driver_mobile, driver_password FROM tractor_drivers WHERE driver_mobile=?`,
       [driver_mobile]
     );
@@ -490,9 +427,6 @@ app.post("/api/tractor-drivers/register", async (req, res) => {
     });
   }
 });
-
-
-
 
 
 app.get("/api/tractor-drivers/me", authMiddleware, (req, res) => {
