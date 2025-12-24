@@ -443,71 +443,30 @@ app.post("/api/tractor-drivers/login", async (req, res) => {
   }
 });
 
-// app.post("/api/tractor-drivers/register", async (req, res) => {
-//   try {
-//     const { driver_village, driver_name, driver_mobile, driver_password } =
-//       req.body;
-//     if (!driver_village || !driver_name || !driver_mobile || !driver_password) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Missing required fields",
-//       });
-//     }
-//     const driver_id = `D${Date.now()}`;
-//     const hashed_driver_password = await hashPassword(driver_password);
-
-//     await pool.query(
-//       `INSERT INTO tractor_drivers (driver_id,driver_village,driver_name, driver_mobile, driver_password, is_active) VALUES (?,?,?,?,?,?)`,
-//       [
-//         driver_id,
-//         driver_village,
-//         driver_name,
-//         driver_mobile,
-//         hashed_driver_password,
-//         true,
-//       ]
-//     );
-//     res.status(201).json({
-//       success: true,
-//       message: "Tractor Driver created successfully",
-//       data: { driver_id, driver_village, driver_name, driver_mobile },
-//     });
-//   } catch (error) {
-//     console.error(error);
-
-//     // duplicate PK handling
-//     if (error.code === "ER_DUP_ENTRY") {
-//       return res.status(409).json({
-//         success: false,
-//         message: "Tractor driver already exists",
-//       });
-//     }
-
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to create tractor driver",
-//     });
-//   }
-// });
-
 app.post("/api/tractor-drivers/register", async (req, res) => {
-  const { driver_village, driver_name, driver_mobile, driver_password } = req.body;
-  if (!driver_village || !driver_name || !driver_mobile || !driver_password) {
-    return res.status(400).json({ success: false, message: "Missing required fields" });
-  }
-
-  const driver_id = `D${Date.now()}`;
-  const hashed_driver_password = await hashPassword(driver_password);
-
-  const connection = await getConnection();
   try {
-    await connection.execute(
-      `INSERT INTO tractor_drivers 
-       (driver_id, driver_village, driver_name, driver_mobile, driver_password, is_active) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [driver_id, driver_village, driver_name, driver_mobile, hashed_driver_password, 1]
-    );
+    const { driver_village, driver_name, driver_mobile, driver_password } =
+      req.body;
+    if (!driver_village || !driver_name || !driver_mobile || !driver_password) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields",
+      });
+    }
+    const driver_id = `D${Date.now()}`;
+    const hashed_driver_password = await hashPassword(driver_password);
 
+    await pool.query(
+      `INSERT INTO tractor_drivers (driver_id,driver_village,driver_name, driver_mobile, driver_password, is_active) VALUES (?,?,?,?,?,?)`,
+      [
+        driver_id,
+        driver_village,
+        driver_name,
+        driver_mobile,
+        hashed_driver_password,
+        true,
+      ]
+    );
     res.status(201).json({
       success: true,
       message: "Tractor Driver created successfully",
@@ -515,14 +474,23 @@ app.post("/api/tractor-drivers/register", async (req, res) => {
     });
   } catch (error) {
     console.error(error);
+
+    // duplicate PK handling
     if (error.code === "ER_DUP_ENTRY") {
-      return res.status(409).json({ success: false, message: "Tractor driver already exists" });
+      return res.status(409).json({
+        success: false,
+        message: "Tractor driver already exists",
+      });
     }
-    res.status(500).json({ success: false, message: "Failed to create tractor driver" });
-  } finally {
-    await connection.end(); // important to close
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to create tractor driver",
+    });
   }
 });
+
+
 
 
 
