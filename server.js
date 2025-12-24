@@ -42,7 +42,7 @@ app.get("/api/farmers", authMiddleware, async (req, res) => {
       values.push(`%${name.toLowerCase()}%`, `%${village.toLowerCase()}%`);
     }
 
-    const rows = await dbQuery(query, values);
+    const [rows] = await dbQuery(query, values);
 
     res.status(200).json({
       success: true,
@@ -106,7 +106,7 @@ app.get("/api/tractor-works", authMiddleware, async (req, res) => {
 from tractor_works as t
 INNER JOIN farmers on farmers.farmer_id=t.farmer_id;`;
 
-    const rows = await dbQuery(query);
+    const [rows] = await dbQuery(query);
     res.status(200).json({
       success: true,
       count: rows.length,
@@ -158,7 +158,7 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
     );
 
     // 2️⃣ Check existing payment due
-    const existingDue = await dbQuery(
+    const [existingDue] = await dbQuery(
       "SELECT * FROM payment_dues WHERE farmer_id = ?",
       [farmer_id]
     );
@@ -224,7 +224,7 @@ app.get("/api/payment-dues", authMiddleware, async (req, res) => {
       values.push(farmer_id);
     }
 
-    const rows = await dbQuery(query, values);
+    const [rows] = await dbQuery(query, values);
 
     res.status(200).json({
       success: true,
@@ -252,7 +252,7 @@ app.post("/api/payment", authMiddleware, async (req, res) => {
   try {
 
     // 1️⃣ Get current due
-    const rows = await dbQuery(
+    const [rows] = await dbQuery(
       "SELECT * FROM payment_dues WHERE due_id = ?",
       [due_id]
     );
@@ -308,7 +308,7 @@ app.get("/api/transactions", authMiddleware, async (req, res) => {
   try {
     const query = `select farmers.name, t.amount, t.payment_mode, DATE_FORMAT(t.payment_date, '%Y-%m-%d') AS payment_date from transactions as t
     INNER JOIN farmers ON farmers.farmer_id=t.farmer_id order by t.payment_date desc;`;
-    const rows = await dbQuery(query);
+    const [rows] = await dbQuery(query);
     res.status(200).json({
       success: true,
       count: rows.length,
@@ -332,7 +332,7 @@ app.post("/api/tractor-drivers/login", async (req, res) => {
         message: "Missing required fields",
       });
     }
-    const rows = await dbQuery(
+    const [rows] = await dbQuery(
       `SELECT driver_id, driver_name, driver_village, driver_mobile, driver_password FROM tractor_drivers WHERE driver_mobile=?`,
       [driver_mobile]
     );

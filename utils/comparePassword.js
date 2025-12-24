@@ -5,7 +5,6 @@ async function comparePassword(plainPassword, storedHash) {
     const isMatch = await bcrypt.compare(plainPassword, storedHash);
     return isMatch;
   } catch (error) {
-    console.error("Error comparing passwords:", error);
     throw error;
   }
 }
