@@ -513,7 +513,7 @@ app.post("/api/tractor-drivers/register", async (req, res) => {
       true
     ];
 
-    await pool.query(
+    await pool.execute(
       `INSERT INTO tractor_drivers 
        (driver_id, driver_village, driver_name, driver_mobile, driver_password, is_active)
        VALUES (?, ?, ?, ?, ?, ?)`,
