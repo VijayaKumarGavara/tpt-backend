@@ -100,13 +100,47 @@ app.post("/api/farmers", authMiddleware, async (req, res) => {
   }
 });
 
+// app.get("/api/tractor-works", authMiddleware, async (req, res) => {
+//   try {
+//     const query = `select farmers.farmer_id, farmers.name, t.work_type, t.pricing_context, t.unit_type, t.notes,t.quantity,t.rate,t.total_amount, DATE_FORMAT(t.work_date, '%Y-%m-%d') AS work_date
+// from tractor_works as t
+// INNER JOIN farmers on farmers.farmer_id=t.farmer_id;`;
+
+//     const [rows] = await dbQuery(query);
+//     res.status(200).json({
+//       success: true,
+//       count: rows.length,
+//       data: rows,
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to get Tractor Works",
+//     });
+//   }
+// });
+
 app.get("/api/tractor-works", authMiddleware, async (req, res) => {
   try {
-    const query = `select farmers.farmer_id, farmers.name, t.work_type, t.pricing_context, t.unit_type, t.notes,t.quantity,t.rate,t.total_amount, DATE_FORMAT(t.work_date, '%Y-%m-%d') AS work_date
-from tractor_works as t
-INNER JOIN farmers on farmers.farmer_id=t.farmer_id;`;
+    const query = `
+      SELECT 
+        farmers.farmer_id,
+        farmers.name,
+        t.work_type,
+        t.pricing_context,
+        t.unit_type,
+        t.notes,
+        t.quantity,
+        t.rate,
+        t.total_amount,
+        DATE_FORMAT(t.work_date, '%Y-%m-%d') AS work_date
+      FROM tractor_works AS t
+      INNER JOIN farmers ON farmers.farmer_id = t.farmer_id;
+    `;
 
-    const [rows] = await dbQuery(query);
+    const [rows] = await dbQuery(query, []); // ✅ FIX
+
     res.status(200).json({
       success: true,
       count: rows.length,
