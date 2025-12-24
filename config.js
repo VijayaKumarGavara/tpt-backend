@@ -7,8 +7,9 @@ export default {
     database: process.env.DB_NAME,
     port: Number(process.env.DB_PORT),
     ssl: {
-      rejectUnauthorized: false, // 👈 allow Aiven self-signed cert
+      rejectUnauthorized: false,
     },
+
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
