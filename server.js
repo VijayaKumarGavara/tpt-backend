@@ -114,7 +114,7 @@ app.get("/api/tractor-works", authMiddleware, async (req, res) => {
         t.total_amount,
         DATE_FORMAT(t.work_date, '%Y-%m-%d') AS work_date
       FROM tractor_works AS t
-      INNER JOIN farmers ON farmers.farmer_id = t.farmer_id order by t.work_date desc;
+      INNER JOIN farmers ON farmers.farmer_id = t.farmer_id order by t.created_at desc;
     `;
 
     const [rows] = await dbQuery(query, []); 
