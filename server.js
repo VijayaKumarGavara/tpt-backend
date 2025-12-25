@@ -340,7 +340,7 @@ app.post("/api/payment", authMiddleware, async (req, res) => {
 
 app.get("/api/transactions", authMiddleware, async (req, res) => {
   try {
-    const query = `select farmers.name, t.amount, t.payment_mode, DATE_FORMAT(t.payment_date, '%Y-%m-%d') AS payment_date from transactions as t
+    const query = `select farmers.name,t.transaction_id, t.amount, t.payment_mode, DATE_FORMAT(t.payment_date, '%Y-%m-%d') AS payment_date from transactions as t
     INNER JOIN farmers ON farmers.farmer_id=t.farmer_id order by t.payment_date desc;`;
     const [rows] = await dbQuery(query);
     res.status(200).json({
