@@ -6,18 +6,18 @@ import hashPassword from "./utils/hashPassword.js";
 import comparePassword from "./utils/comparePassword.js";
 import { generateToken } from "./utils/jwt.js";
 import authMiddleware from "./middlewares/authMiddleware.js";
-import { dbQuery } from "./dbQuery.js";
-
+import { dbQuery, getConnection } from "./dbQuery.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors({
-  origin: "*", // later you can restrict
-}));
+app.use(
+  cors({
+    origin: "*", // later you can restrict
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
 
 const today = new Date().toISOString().split("T")[0];
 app.get("/health", (req, res) => {
@@ -58,7 +58,6 @@ app.get("/api/farmers", authMiddleware, async (req, res) => {
   }
 });
 
-
 app.post("/api/farmers", authMiddleware, async (req, res) => {
   try {
     const { name, village, mobile } = req.body;
@@ -88,7 +87,7 @@ app.post("/api/farmers", authMiddleware, async (req, res) => {
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
         success: false,
-        isAlreadyExists:true,
+        isAlreadyExists: true,
         message: "Farmer already exists",
       });
     }
@@ -99,27 +98,6 @@ app.post("/api/farmers", authMiddleware, async (req, res) => {
     });
   }
 });
-
-// app.get("/api/tractor-works", authMiddleware, async (req, res) => {
-//   try {
-//     const query = `select farmers.farmer_id, farmers.name, t.work_type, t.pricing_context, t.unit_type, t.notes,t.quantity,t.rate,t.total_amount, DATE_FORMAT(t.work_date, '%Y-%m-%d') AS work_date
-// from tractor_works as t
-// INNER JOIN farmers on farmers.farmer_id=t.farmer_id;`;
-
-//     const [rows] = await dbQuery(query);
-//     res.status(200).json({
-//       success: true,
-//       count: rows.length,
-//       data: rows,
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to get Tractor Works",
-//     });
-//   }
-// });
 
 app.get("/api/tractor-works", authMiddleware, async (req, res) => {
   try {
@@ -167,13 +145,14 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
   } = req.body;
 
   const total_amount = quantity * rate;
+  let conn = await getConnection();
 
+  await conn.beginTransaction();
   try {
-
     // 1️⃣ Insert tractor work
     const workId = `W${Date.now()}`;
 
-    await dbQuery(
+    await conn.query(
       `INSERT INTO tractor_works 
       (work_id, farmer_id, work_type, pricing_context, unit_type, notes, quantity, rate, total_amount, work_date)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -192,14 +171,14 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
     );
 
     // 2️⃣ Check existing payment due
-    const [existingDue] = await dbQuery(
-      "SELECT * FROM payment_dues WHERE farmer_id = ?",
+    const [existingDue] = await conn.query(
+      "SELECT * FROM payment_dues WHERE farmer_id = ? FOR UPDATE",
       [farmer_id]
     );
 
     if (existingDue.length > 0) {
       // update
-      await dbQuery(
+      await conn.query(
         `UPDATE payment_dues 
          SET amount_due = amount_due + ?, updated_at = CURDATE()
          WHERE farmer_id = ?`,
@@ -216,7 +195,7 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
         [dueId, farmer_id, total_amount]
       );
     }
-
+    await conn.commit();
 
     res.status(201).json({
       success: true,
@@ -225,12 +204,14 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-
+    await conn.rollback();
     res.status(500).json({
       success: false,
       message: "Failed to add tractor work",
     });
-  } 
+  } finally {
+    conn.release();
+  }
 });
 
 app.get("/api/payment-dues", authMiddleware, async (req, res) => {
@@ -283,11 +264,13 @@ app.post("/api/payment", authMiddleware, async (req, res) => {
       message: "Invalid payment data",
     });
   }
-  try {
+  let conn = await getConnection();
 
+  await conn.beginTransaction();
+  try {
     // 1️⃣ Get current due
-    const [rows] = await dbQuery(
-      "SELECT * FROM payment_dues WHERE due_id = ?",
+    const [rows] = await conn.query(
+      "SELECT * FROM payment_dues WHERE due_id = ? FOR UPDATE",
       [due_id]
     );
 
@@ -306,7 +289,8 @@ app.post("/api/payment", authMiddleware, async (req, res) => {
     const status = newAmountDue === 0 ? "paid" : "partial";
 
     // 2️⃣ Update payment_dues
-    await dbQuery(
+
+    await conn.query(
       `UPDATE payment_dues
        SET amount_due = ?, amount_paid = ?, status = ?, updated_at = ?
        WHERE due_id = ?`,
@@ -316,13 +300,14 @@ app.post("/api/payment", authMiddleware, async (req, res) => {
     // 3️⃣ Insert transaction
     const transactionId = `T${Date.now()}`;
 
-    await dbQuery(
+    await conn.query(
       `INSERT INTO transactions
        (transaction_id, farmer_id, due_id, amount, payment_mode, payment_date)
        VALUES (?, ?, ?, ?, ?, ?)`,
       [transactionId, farmer_id, due_id, amount, payment_mode, today]
     );
 
+    await conn.commit();
 
     res.status(201).json({
       success: true,
@@ -330,12 +315,14 @@ app.post("/api/payment", authMiddleware, async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-
+    await conn.rollback();
     res.status(500).json({
       success: false,
       message: error.message || "Payment failed",
     });
-  } 
+  } finally {
+    conn.release();
+  }
 });
 
 app.get("/api/transactions", authMiddleware, async (req, res) => {
@@ -411,8 +398,8 @@ app.post("/api/tractor-drivers/login", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to Login. Please try after sometime",
-      errorMsg:error.message,
-      stack: error.stack
+      errorMsg: error.message,
+      stack: error.stack,
     });
   }
 });
@@ -463,7 +450,6 @@ app.post("/api/tractor-drivers/register", async (req, res) => {
     });
   }
 });
-
 
 app.get("/api/tractor-drivers/me", authMiddleware, (req, res) => {
   res.json({

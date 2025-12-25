@@ -7,6 +7,9 @@ export const dbQuery = (sql, values = []) => {
   // console.log("Values:", values);
   return pool.query(sql, values);
 };
+export const getConnection = async () => {
+  return pool.getConnection();
+};
 
 // import ConnectDB from "./dbConnection.js";
 
