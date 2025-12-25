@@ -188,7 +188,7 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
       // create
       const dueId = `D${Date.now()}`;
 
-      await dbQuery(
+      await conn.query(
         `INSERT INTO payment_dues 
         (due_id, farmer_id, amount_due, amount_paid, status, updated_at)
         VALUES (?, ?, ?, 0, 'pending', CURDATE())`,
