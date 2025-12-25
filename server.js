@@ -19,7 +19,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const today = new Date().toISOString().split("T")[0];
+const today = new Date();
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
@@ -114,10 +114,10 @@ app.get("/api/tractor-works", authMiddleware, async (req, res) => {
         t.total_amount,
         DATE_FORMAT(t.work_date, '%Y-%m-%d') AS work_date
       FROM tractor_works AS t
-      INNER JOIN farmers ON farmers.farmer_id = t.farmer_id;
+      INNER JOIN farmers ON farmers.farmer_id = t.farmer_id order by t.work_date desc;
     `;
 
-    const [rows] = await dbQuery(query, []); // ✅ FIX
+    const [rows] = await dbQuery(query, []); 
 
     res.status(200).json({
       success: true,
