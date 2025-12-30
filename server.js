@@ -7,7 +7,7 @@ import comparePassword from "./utils/comparePassword.js";
 import { generateToken } from "./utils/jwt.js";
 import authMiddleware from "./middlewares/authMiddleware.js";
 import { dbQuery, getConnection } from "./dbQuery.js";
-
+import normalizeHours from "./utils/normalizeHours.js";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -117,7 +117,7 @@ app.get("/api/tractor-works", authMiddleware, async (req, res) => {
       INNER JOIN farmers ON farmers.farmer_id = t.farmer_id order by t.created_at desc;
     `;
 
-    const [rows] = await dbQuery(query, []); 
+    const [rows] = await dbQuery(query, []);
 
     res.status(200).json({
       success: true,
@@ -144,7 +144,19 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
     rate,
   } = req.body;
 
-  const total_amount = quantity * rate;
+  let normalizedQuantity;
+
+  try {
+    normalizedQuantity = normalizeHours(quantity);
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message,
+    });
+  }
+
+  const total_amount = normalizedQuantity * rate;
+
   let conn = await getConnection();
 
   await conn.beginTransaction();
