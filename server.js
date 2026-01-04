@@ -235,22 +235,22 @@ app.delete("/api/tractor-works", authMiddleware, async (req, res) => {
     await conn.beginTransaction();
 
     const [workRows] = await conn.query(
-      `SELECT work_id, farmer_id, total_amount
-       FROM tractor_works
-       WHERE work_id = ?
-       FOR UPDATE`,
+      `SELECT work_id, farmer_id, total_amount, created_at
+      FROM tractor_works WHERE work_id = ? FOR UPDATE`,
       [work_id]
     );
 
     if (workRows.length === 0) {
       await conn.rollback();
-      return res.status(404).json({ success: false, message: "Work not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Work not found" });
     }
 
     const work = workRows[0];
 
     const [dueRows] = await conn.query(
-      `SELECT amount_due, amount_paid
+      `SELECT amount_due, amount_paid, last_payment_at
        FROM payment_dues
        WHERE farmer_id = ?
        FOR UPDATE`,
@@ -265,7 +265,7 @@ app.delete("/api/tractor-works", authMiddleware, async (req, res) => {
     const dues = dueRows[0];
 
     // ❌ HARD STOP after payment
-    if (dues.amount_paid > 0) {
+    if (dues.last_payment_at && work.created_at <= dues.last_payment_at) {
       await conn.rollback();
       return res.status(400).json({
         success: false,
@@ -278,12 +278,20 @@ app.delete("/api/tractor-works", authMiddleware, async (req, res) => {
 
     // Adjust dues
     const newAmountDue = Math.max(0, dues.amount_due - work.total_amount);
+    let newStatus = "pending";
+
+    if (dues.amount_paid > 0 && dues.amount_paid < newAmountDue) {
+      newStatus = "partial";
+    } else if (dues.amount_paid >= newAmountDue && newAmountDue === 0) {
+      newStatus = "paid";
+    }
+    const adjustedPaid = Math.min(dues.amount_paid, newAmountDue);
 
     await conn.query(
       `UPDATE payment_dues
-       SET amount_due = ?, status = 'pending'
+       SET amount_due = ?, amount_paid=?, status = ?
        WHERE farmer_id = ?`,
-      [newAmountDue, work.farmer_id]
+      [newAmountDue, adjustedPaid, newStatus, work.farmer_id]
     );
 
     await conn.commit();
@@ -296,7 +304,6 @@ app.delete("/api/tractor-works", authMiddleware, async (req, res) => {
     if (conn) conn.release();
   }
 });
-
 
 app.get("/api/payment-dues", authMiddleware, async (req, res) => {
   const { farmer_id } = req.query;
