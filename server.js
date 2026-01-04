@@ -285,13 +285,12 @@ app.delete("/api/tractor-works", authMiddleware, async (req, res) => {
     } else if (dues.amount_paid >= newAmountDue && newAmountDue === 0) {
       newStatus = "paid";
     }
-    const adjustedPaid = Math.min(dues.amount_paid, newAmountDue);
 
     await conn.query(
       `UPDATE payment_dues
-       SET amount_due = ?, amount_paid=?, status = ?
+       SET amount_due = ?, status = ?
        WHERE farmer_id = ?`,
-      [newAmountDue, adjustedPaid, newStatus, work.farmer_id]
+      [newAmountDue, newStatus, work.farmer_id]
     );
 
     await conn.commit();
