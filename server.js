@@ -19,7 +19,6 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const today = new Date();
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
@@ -103,6 +102,8 @@ app.get("/api/tractor-works", authMiddleware, async (req, res) => {
   try {
     const query = `
       SELECT 
+        t.created_at,
+        t.work_id,
         farmers.farmer_id,
         farmers.name,
         t.work_type,
@@ -166,8 +167,8 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
 
     await conn.query(
       `INSERT INTO tractor_works 
-      (work_id, farmer_id, work_type, pricing_context, unit_type, notes, quantity, rate, total_amount, work_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (work_id, farmer_id, work_type, pricing_context, unit_type, notes, quantity, rate, total_amount)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         workId,
         farmer_id,
@@ -175,10 +176,9 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
         pricing_context ? JSON.stringify(pricing_context) : null,
         unit_type,
         notes,
-        quantity,
+        normalizedQuantity,
         rate,
         total_amount,
-        today,
       ]
     );
 
@@ -192,7 +192,7 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
       // update
       await conn.query(
         `UPDATE payment_dues 
-         SET amount_due = amount_due + ?, updated_at = CURDATE()
+         SET amount_due = amount_due + ?
          WHERE farmer_id = ?`,
         [total_amount, farmer_id]
       );
@@ -202,8 +202,8 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
 
       await conn.query(
         `INSERT INTO payment_dues 
-        (due_id, farmer_id, amount_due, amount_paid, status, updated_at)
-        VALUES (?, ?, ?, 0, 'pending', CURDATE())`,
+        (due_id, farmer_id, amount_due, amount_paid, status)
+        VALUES (?, ?, ?, 0, 'pending')`,
         [dueId, farmer_id, total_amount]
       );
     }
@@ -225,6 +225,78 @@ app.post("/api/tractor-works", authMiddleware, async (req, res) => {
     conn.release();
   }
 });
+
+app.delete("/api/tractor-works", authMiddleware, async (req, res) => {
+  const { work_id } = req.body;
+  let conn;
+
+  try {
+    conn = await getConnection();
+    await conn.beginTransaction();
+
+    const [workRows] = await conn.query(
+      `SELECT work_id, farmer_id, total_amount
+       FROM tractor_works
+       WHERE work_id = ?
+       FOR UPDATE`,
+      [work_id]
+    );
+
+    if (workRows.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, message: "Work not found" });
+    }
+
+    const work = workRows[0];
+
+    const [dueRows] = await conn.query(
+      `SELECT amount_due, amount_paid
+       FROM payment_dues
+       WHERE farmer_id = ?
+       FOR UPDATE`,
+      [work.farmer_id]
+    );
+
+    if (dueRows.length === 0) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, message: "Due not found" });
+    }
+
+    const dues = dueRows[0];
+
+    // ❌ HARD STOP after payment
+    if (dues.amount_paid > 0) {
+      await conn.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "Cannot delete work after payment is made",
+      });
+    }
+
+    // Delete work
+    await conn.query(`DELETE FROM tractor_works WHERE work_id = ?`, [work_id]);
+
+    // Adjust dues
+    const newAmountDue = Math.max(0, dues.amount_due - work.total_amount);
+
+    await conn.query(
+      `UPDATE payment_dues
+       SET amount_due = ?, status = 'pending'
+       WHERE farmer_id = ?`,
+      [newAmountDue, work.farmer_id]
+    );
+
+    await conn.commit();
+    res.json({ success: true });
+  } catch (error) {
+    if (conn) await conn.rollback();
+    console.error(error);
+    res.status(500).json({ success: false, message: "Delete failed" });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 
 app.get("/api/payment-dues", authMiddleware, async (req, res) => {
   const { farmer_id } = req.query;
@@ -304,9 +376,9 @@ app.post("/api/payment", authMiddleware, async (req, res) => {
 
     await conn.query(
       `UPDATE payment_dues
-       SET amount_due = ?, amount_paid = ?, status = ?, updated_at = ?
+       SET amount_due = ?, amount_paid = ?, status = ?,  last_payment_at = CURRENT_TIMESTAMP
        WHERE due_id = ?`,
-      [newAmountDue, newAmountPaid, status, today, due_id]
+      [newAmountDue, newAmountPaid, status, due_id]
     );
 
     // 3️⃣ Insert transaction
@@ -314,9 +386,9 @@ app.post("/api/payment", authMiddleware, async (req, res) => {
 
     await conn.query(
       `INSERT INTO transactions
-       (transaction_id, farmer_id, due_id, amount, payment_mode, payment_date)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [transactionId, farmer_id, due_id, amount, payment_mode, today]
+       (transaction_id, farmer_id, due_id, amount, payment_mode)
+       VALUES (?, ?, ?, ?, ?)`,
+      [transactionId, farmer_id, due_id, amount, payment_mode]
     );
 
     await conn.commit();
